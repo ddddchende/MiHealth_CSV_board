@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>健康数据看板</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="brand">
+        <h1>健康数据看板</h1>
+        <span class="meta" id="brandMeta"></span>
+      </div>
+      <div class="ranges" id="ranges"></div>
+    </div>
+    <nav class="tabs">
+      <button data-tab="overview" class="on">总览</button>
+      <button data-tab="steps">步数与活动</button>
+      <button data-tab="heart">心率</button>
+      <button data-tab="sleep">睡眠</button>
+      <button data-tab="sports">运动</button>
+      <button data-tab="body">身体指标</button>
+      <button data-tab="stress">压力</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="module on" id="tab-overview"></section>
+    <section class="module" id="tab-steps"></section>
+    <section class="module" id="tab-heart"></section>
+    <section class="module" id="tab-sleep"></section>
+    <section class="module" id="tab-sports"></section>
+    <section class="module" id="tab-body"></section>
+    <section class="module" id="tab-stress"></section>
+  </main>
+</div>
+
+<!-- 单日钻取弹层 -->
+<div class="overlay" id="dayModal">
+  <div class="modal">
+    <div class="modal-h">
+      <span class="date"></span><span class="wd"></span>
+      <button class="close">✕</button>
+    </div>
+    <div class="modal-b"></div>
+  </div>
+</div>
+
+<script src="lib/echarts.min.js"></script>
+<script src="data/meta.js" onerror="window.__DATA_READY__=false"></script>
+<script src="data/daily.js" onerror="window.__DATA_READY__=false"></script>
+<script src="data/sports.js" onerror="window.__DATA_READY__=false"></script>
+<script src="data/hourly.js" onerror="window.__DATA_READY__=false"></script>
+<script>
+  // 数据文件缺失时的友好提示（需在数据脚本加载完成后计算）
+  window.__DATA_READY__ = !!(window.__DAILY__ && window.__META__);
+</script>
+<script src="js/app.js"></script>
+<script src="js/modules.js"></script>
+<script>
+(function () {
+  if (!window.__DATA_READY__) {
+    document.getElementById('app').innerHTML =
+      '<div class="boot-error"><h2 style="margin-bottom:12px">数据文件尚未生成</h2>' +
+      '<div>请先运行预处理脚本，生成 <code>data/</code> 目录后再打开本页面：</div>' +
+      '<div style="margin-top:10px"><code>python 数据预处理.py</code></div>' +
+      '<div class="note" style="margin-top:14px">需要 Python 3.8+ 与 pandas · 也可直接双击 数据预处理.py</div></div>';
+    return;
+  }
+  document.getElementById('brandMeta').textContent =
+    window.__META__.first + ' ~ ' + window.__META__.last + ' · 生成于 ' + window.__META__.generated;
+  window.Board.boot();
+})();
+</script>
+</body>
+</html>

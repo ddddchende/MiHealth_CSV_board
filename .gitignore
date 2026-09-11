@@ -1,0 +1,14 @@
+# 小米运动健康导出的原始 CSV（含账号 UUID，禁止入库）
+*MiFitness*
+
+# 预处理生成的个人健康数据
+data/
+
+# Python
+__pycache__/
+*.pyc
+
+# 系统 / 编辑器
+Thumbs.db
+Desktop.ini
+.DS_Store
