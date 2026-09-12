@@ -232,11 +232,11 @@
       visualMap: {
         min: 0, max: 15000, calculable: false, orient: 'horizontal', left: 'center', bottom: 0,
         itemHeight: 90, itemWidth: 12, textStyle: { color: '#8a90a3', fontSize: 10 },
-        inRange: { color: ['#eef1f8', '#c4d3fb', '#7d9bf9', '#3b6df0', '#1d3fae'] },
+        inRange: { color: ['#d8dbe1', '#c4d3fb', '#7d9bf9', '#3b6df0', '#1d3fae'] },
       },
       calendar: {
         range: yr, cellSize: ['auto', 'auto'], left: 44, right: 8, top: 34, bottom: 52,
-        itemStyle: { borderWidth: 2, borderColor: '#fff' },
+        itemStyle: { color: '#d8dbe1', borderWidth: 2, borderColor: '#e5e7eb' },
         yearLabel: { show: false },
         dayLabel: { nameMap: 'ZH', color: '#8a90a3', fontSize: 10 },
         monthLabel: { nameMap: 'ZH', color: '#8a90a3', fontSize: 10 },
@@ -268,7 +268,7 @@
       yAxis: { type: 'category', data: ['一', '二', '三', '四', '五', '六', '日'],
         axisLabel: { color: '#8a90a3', fontSize: 11 } },
       visualMap: { show: false, min: 0, max: Math.max(...H.wh.flat()) || 100,
-        inRange: { color: ['#f2f4fa', '#c4d3fb', '#7d9bf9', '#3b6df0', '#1d3fae'] } },
+        inRange: { color: ['#d8dbe1', '#c4d3fb', '#7d9bf9', '#3b6df0', '#1d3fae'] } },
       series: [{ type: 'heatmap', data: H.wh.flatMap((row, w) => row.map((v, h) => [h, w, v])) }],
     }), { silent: true });
 
@@ -376,11 +376,17 @@
       wake.forEach(v => { if (v != null) { s2 += v; n2++; } });
       if (n) bedAvg = s / n; if (n2) wakeAvg = s2 / n2; }
 
+    const nap = sl('napMin');
+    const napVals = nap.filter(v => v != null);
+    const napSub = napVals.length
+      ? `共 ${napVals.length} 天 · 平均 ${Math.round(napVals.reduce((a, b) => a + b, 0) / napVals.length)} 分钟 · 最长 ${Math.max(...napVals)} 分钟` : '';
+
     sec.innerHTML = `
       <div class="grid">
         ${card('slpTotal', '睡眠时长', `平均入睡 ${fmtClock(bedAvg)} · 平均起床 ${fmtClock(wakeAvg)} · 参考带 7–9 小时`, 12, '')}
         ${card('slpStruct', '睡眠结构', '深睡 / 浅睡 / REM / 清醒（小时，堆叠）', 8, '')}
         ${card('slpScore', '睡眠评分', '', 4, '')}
+        ${napSub ? card('slpNap', '零星小睡', napSub, 12, '') : ''}
         ${card('slpSched', '作息节律', '入睡 ● 起床 ○ 时间散点', 12, '')}
       </div>`;
 
@@ -398,6 +404,8 @@
           if (i >= 0) {
             const b = sl('bedMin')[i], w = sl('wakeMin')[i];
             if (b != null && w != null) h += `<div style="border-top:1px solid #eceef4;margin-top:6px;padding-top:6px;display:flex;justify-content:space-between;gap:16px"><span style="color:#8a90a3">入睡 / 起床</span><b>${fmtClock(b)} ~ ${fmtClock(w)}</b></div>`;
+            const nap = sl('napMin')[i];
+            if (nap) h += `<div style="display:flex;align-items:center;margin-top:4px"><span style="color:#8a90a3">其中小睡</span><b style="margin-left:auto;padding-left:16px">${fmtDur(nap)}</b></div>`;
           }
           return h;
         },
@@ -414,6 +422,25 @@
         { type: 'line', name: '7日均线', data: movingAvg(sl('slpTotal'), 7).map(v => v == null ? null : +(v / 60).toFixed(2)),
           showSymbol: false, lineStyle: { width: 2.2, color: '#4c2fd6' }, itemStyle: { color: '#4c2fd6' } },
       ],
+    })));
+    if (napSub) mount('slpNap', chartBase(Object.assign({
+      grid: { left: 50, right: 36, top: 30, bottom: zB(ds.length, 30) },
+      dataZoom: zoom(ds.length),
+      tooltip: {
+        formatter: ps => {
+          let h = `<div style="font-weight:600;margin-bottom:4px">${ps[0].name}</div>` +
+            `<div style="display:flex;align-items:center">${ps[0].marker}<span style="margin-left:4px">小睡</span><b style="margin-left:auto;padding-left:16px">${ps[0].value != null ? fmtDur(ps[0].value) : '—'}</b></div>`;
+          const i = ds.indexOf(ps[0].name);
+          const wins = i >= 0 ? sl('napWin')[i] : null;
+          if (wins && wins.length)
+            h += `<div style="border-top:1px solid #eceef4;margin-top:6px;padding-top:6px;display:flex;justify-content:space-between;gap:16px"><span style="color:#8a90a3">时段</span><b style="text-align:right">${wins.map(w => `${fmtClock(w[0])} ~ ${fmtClock(w[1])}`).join('<br/>')}</b></div>`;
+          return h;
+        },
+      },
+      xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
+      yAxis: Object.assign({}, AXIS_VAL, { name: '分钟' }),
+      series: [{ type: 'bar', name: '小睡', data: nap,
+        itemStyle: { color: '#f5a623', borderRadius: [2, 2, 0, 0] }, barWidth: '90%' }],
     })));
     const toH = a => a.map(v => v == null ? null : +(v / 60).toFixed(2));
     mount('slpStruct', chartBase(Object.assign({
@@ -457,7 +484,7 @@
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
       yAxis: { type: 'value', min: -420, max: 1140, interval: 120,
         axisLabel: { color: '#8a90a3', fontSize: 11, formatter: v => fmtClock(v) },
-        splitLine: { lineStyle: { color: '#f0f1f6' } } },
+        splitLine: { lineStyle: { color: '#cdd2da' } } },
       tooltip: {
         trigger: 'axis',
         formatter: ps => {
@@ -551,7 +578,7 @@
       tooltip: { trigger: 'item', formatter: '{b}<br/><b>{c}</b> 次（{d}%）' },
       series: [{
         type: 'pie', radius: ['44%', '70%'], center: ['50%', '52%'],
-        itemStyle: { borderRadius: 5, borderColor: '#fff', borderWidth: 2 },
+        itemStyle: { borderRadius: 5, borderColor: '#e5e7eb', borderWidth: 2 },
         label: { color: '#7b8296', fontSize: 11 },
         data: Object.entries(typeCnt).map(([t, c]) => ({ name: typeCn[t] || t, value: c })),
       }],
@@ -736,10 +763,10 @@
         formatter: p => `${p.value[2]}<br/>日均压力 <b>${Math.round(p.value[0])}</b> · 睡眠评分 <b>${Math.round(p.value[1])}</b> 分` },
       grid: { left: 50, right: 24, top: 26, bottom: 40 },
       xAxis: { type: 'value', name: '日均压力', nameLocation: 'middle', nameGap: 26,
-        nameTextStyle: { color: '#8a90a3', fontSize: 11 }, splitLine: { lineStyle: { color: '#f0f1f6' } },
+        nameTextStyle: { color: '#8a90a3', fontSize: 11 }, splitLine: { lineStyle: { color: '#cdd2da' } },
         axisLabel: { color: '#8a90a3', fontSize: 11 } },
       yAxis: { type: 'value', name: '睡眠评分', min: 0, max: 100,
-        nameTextStyle: { color: '#8a90a3', fontSize: 11 }, splitLine: { lineStyle: { color: '#f0f1f6' } },
+        nameTextStyle: { color: '#8a90a3', fontSize: 11 }, splitLine: { lineStyle: { color: '#cdd2da' } },
         axisLabel: { color: '#8a90a3', fontSize: 11 } },
       series: [{ type: 'scatter', data: vsData, symbolSize: 7,
         itemStyle: { color: '#7a5af8', opacity: .5 } }],

@@ -174,14 +174,14 @@ window.Board = (function () {
   const AXIS_DATE = {
     type: 'category',
     _dateAxis: true,
-    axisLine: { lineStyle: { color: '#d8dbe4' } },
+    axisLine: { lineStyle: { color: '#c3c9d2' } },
     axisTick: { show: false },
     axisLabel: { color: '#8a90a3', fontSize: 11 },
     boundaryGap: false,
   };
   const AXIS_VAL = {
     type: 'value',
-    splitLine: { lineStyle: { color: '#f0f1f6' } },
+    splitLine: { lineStyle: { color: '#cdd2da' } },
     axisLabel: { color: '#8a90a3', fontSize: 11 },
   };
 
@@ -220,6 +220,8 @@ window.Board = (function () {
     close() { this._cur = null; this.el.classList.remove('open'); },
     async render(date, i, body) {
       const g = k => D[k] ? D[k][i] : null;
+      const napTxt = g('napMin') ? `${fmtDur(g('napMin'))}${g('napWin') && g('napWin').length
+        ? '（' + g('napWin').map(w => `${fmtClock(w[0])}~${fmtClock(w[1])}`).join('、') + '）' : ''}` : null;
       // 指标 chips
       const chips = [
         ['步数', g('steps') != null ? fmtInt(g('steps')) + ' 步' : null],
@@ -227,6 +229,7 @@ window.Board = (function () {
         ['活动卡路里', g('cal') != null ? g('cal') + ' kcal' : null],
         ['睡眠', g('slpTotal') != null ? fmtDur(g('slpTotal')) : null],
         ['睡眠评分', g('slpScore') != null ? g('slpScore') + ' 分' : null],
+        ['小睡', napTxt],
         ['入睡 / 起床', g('bedMin') != null ? `${fmtClock(g('bedMin'))} ~ ${fmtClock(g('wakeMin'))}` : null],
         ['静息心率', g('rhr') != null ? g('rhr') + ' bpm' : null],
         ['平均心率', g('avgHr') != null ? g('avgHr') + ' bpm' : null],
@@ -897,6 +900,7 @@ window.Board = (function () {
     $('#dApply').addEventListener('click', () => {
       const f = $('#dFrom').value, t = $('#dTo').value;
       if (f && t) applyCustom(f, t);
+      $('#customBox').classList.remove('show');
     });
 
     // Tabs

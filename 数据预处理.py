@@ -130,7 +130,7 @@ D = {k: {} for k in [
     'avgHr','maxHr','minHr','rhr',
     'zWarm','zFat','zAero','zAnaero','zExtreme',
     'slpTotal','slpDeep','slpLight','slpRem','slpAwake','slpScore',
-    'bedMin','wakeMin','slpSegs',
+    'bedMin','wakeMin','slpSegs','napMin','napWin',
     'spo2','spo2Min','spo2Lack',
     'stress','sRelax','sMild','sMod','sSev',
 ]}
@@ -171,16 +171,14 @@ with open(f, encoding='utf-8') as fp:
                 D['slpRem'][day] = v.get('sleep_rem_duration')
                 D['slpAwake'][day] = v.get('sleep_awake_duration')
                 D['slpScore'][day] = v.get('sleep_score')
-                segs = v.get('segment_details') or []
+                segs = [s for s in (v.get('segment_details') or []) if s.get('bedtime')]
                 if segs:
-                    # 该日 CST 00:00 的 unix 时间戳；入睡/起床存为相对分钟的偏移（入睡常为负值）
+                    # 该日 CST 00:00 的 unix 时间戳；各段存为 [入睡偏移, 时长, 起床偏移]（入睡常为负值）
+                    # 主睡眠/零星小睡在明细解析完成后统一判定（见 watch_daytime_sleep 合并处）
                     base = (ts + TZ) // 86400 * 86400 - TZ
-                    b = segs[0].get('bedtime'); w = segs[-1].get('wake_up_time')
-                    if b and w:
-                        D['bedMin'][day] = round((b - base) / 60)
-                        D['wakeMin'][day] = round((w - base) / 60)
-                    D['slpSegs'][day] = [[round((s.get('bedtime', 0) - base) / 60),
-                                          s.get('duration', 0)] for s in segs if s.get('bedtime')]
+                    D['slpSegs'][day] = sorted([round((s['bedtime'] - base) / 60),
+                                                s.get('duration', 0),
+                                                round((s.get('wake_up_time', 0) - base) / 60)] for s in segs)
             elif key == 'spo2':
                 D['spo2'][day] = v.get('avg_spo2')
                 D['spo2Min'][day] = v.get('min_spo2')
@@ -470,6 +468,28 @@ if BIG:
                     big_daily['vitL'][d] = v.get('daily_low_intensity_vitality')
                     big_daily['vitM'][d] = v.get('daily_medium_intensity_vitality')
                     big_daily['vitH'][d] = v.get('daily_high_intensity_vitality')
+            elif key == 'watch_daytime_sleep':
+                # 白天睡眠记录：并入该日睡眠段列表，主睡眠/零星小睡随后统一判定
+                for ts, val in zip(sub['Time'], sub['Value']):
+                    try:
+                        v = json.loads(val)
+                    except Exception:
+                        continue
+                    dur = v.get('duration')
+                    items = v.get('items') or []
+                    if not dur or not items:
+                        continue
+                    t0 = v.get('date_time') or ts
+                    base = (t0 + TZ) // 86400 * 86400 - TZ
+                    b = round((items[0]['start_time'] - base) / 60)
+                    w = round((items[-1]['end_time'] - base) / 60)
+                    if w <= b:
+                        continue
+                    eps = D['slpSegs'].setdefault(day_str(t0), [])
+                    # 与聚合分段大面积重叠视为同一段睡眠，跳过防重复计入
+                    if any(min(w, e[2]) - max(b, e[0]) > 0.5 * min(dur, e[1]) for e in eps):
+                        continue
+                    eps.append([b, dur, w])
             else:
                 peek(key, str(sub['Value'].iloc[0]))
         print(f'  chunk {ci}: 累计 {total_rows} 行, {time.time()-t0:.0f}s', flush=True)
@@ -481,6 +501,40 @@ if BIG:
             print(f'  {k}: {v}')
 else:
     print('  未找到分钟级明细文件，跳过。')
+
+# 主睡眠/零星小睡统一判定：先把间隔≤2小时的段合并为同一次睡眠
+# （夜间短暂清醒被手环拆段不算分界），最长会话为主睡眠（含被归为"白天睡眠"
+# 的长睡眠，如周末睡到下午）；其余会话中单段≤3小时的为零星小睡
+NAP_CAP = 180
+GAP_MERGE = 120
+for day, eps in D['slpSegs'].items():
+    if not eps:
+        continue
+    sessions = []   # [入睡偏移, 起床偏移, 睡眠总分钟, 段列表]
+    for e in sorted(eps):
+        b, dur, w = e
+        if sessions and b - sessions[-1][1] <= GAP_MERGE:
+            s = sessions[-1]
+            s[1] = max(s[1], w)
+            s[2] += dur
+            s[3].append(e)
+        else:
+            sessions.append([b, w, dur, [e]])
+    main = max(sessions, key=lambda s: s[2])
+    D['bedMin'][day] = main[0]
+    D['wakeMin'][day] = main[1]
+    extra = 0
+    wins = []
+    for s in sessions:
+        if s is main:
+            continue
+        for e in s[3]:
+            if e[1] <= NAP_CAP:
+                extra += e[1]
+                wins.append([e[0], e[2]])
+    if extra > 0:
+        D['napMin'][day] = extra
+        D['napWin'][day] = wins
 
 # 小时节律：从月分片累计
 for md, days in months.items():
@@ -564,6 +618,8 @@ daily = {
     'slpLight': arr(D['slpLight']), 'slpRem': arr(D['slpRem']),
     'slpAwake': arr(D['slpAwake']), 'slpScore': arr(D['slpScore']),
     'bedMin': arr(D['bedMin']), 'wakeMin': arr(D['wakeMin']),
+    'napMin': arr(D['napMin']),
+    'napWin': arr(D['napWin']),
     'spo2': arr(D['spo2']), 'spo2Min': arr(D['spo2Min']), 'spo2Lack': arr(D['spo2Lack']),
     'stress': arr(D['stress']), 'sRelax': arr(D['sRelax']), 'sMild': arr(D['sMild']),
     'sMod': arr(D['sMod']), 'sSev': arr(D['sSev']),
