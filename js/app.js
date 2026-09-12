@@ -96,8 +96,41 @@ window.Board = (function () {
     const el = document.getElementById(id);
     if (!el) return null;
     if (charts.has(id)) { charts.get(id).dispose(); charts.delete(id); }
+
+    // 日期轴（带 _dateAxis 标记）：标签以可视窗口末尾为锚点均匀回推，
+    // 保证最右日期一定显示、全程间距均匀；缩放后按新窗口重算步长
+    let tailAnchor = null;
+    let nAll = 0;
+    const xa = option.xAxis;
+    if (xa && xa._dateAxis && Array.isArray(xa.data) && xa.data.length > 1) {
+      nAll = xa.data.length;
+      const clean = Object.assign({}, xa);
+      delete clean._dateAxis;
+      option.xAxis = clean;
+      tailAnchor = (s, e) => {
+        const maxL = Math.max(2, Math.floor(el.clientWidth / 95));
+        const step = Math.max(1, Math.ceil((e - s) / maxL));
+        c.setOption({ xAxis: { axisLabel: { interval: i => i === e || (e - i) % step === 0 } } });
+      };
+    }
+
     const c = echarts.init(el);
     c.setOption(option);
+    if (tailAnchor) {
+      tailAnchor(0, nAll - 1);
+      c.on('dataZoom', debounce(ev => {
+        const dz = ev.batch ? ev.batch[0] : ev;
+        let s = dz.startValue, e = dz.endValue;
+        if (s == null || e == null) {
+          s = Math.round(dz.start / 100 * (nAll - 1));
+          e = Math.round(dz.end / 100 * (nAll - 1));
+        }
+        // 端点归一化：窗口触及数据边界时强制对齐，避免差一导致末尾标签丢失
+        if (s <= 0) s = 0;
+        if (e >= nAll - 1) e = nAll - 1;
+        tailAnchor(s, e);
+      }, 120));
+    }
     charts.set(id, c);
     if (!opts.silent) {
       c.on('click', p => {
@@ -113,6 +146,7 @@ window.Board = (function () {
 
   const AXIS_DATE = {
     type: 'category',
+    _dateAxis: true,
     axisLine: { lineStyle: { color: '#d8dbe4' } },
     axisTick: { show: false },
     axisLabel: { color: '#8a90a3', fontSize: 11 },
@@ -205,8 +239,8 @@ window.Board = (function () {
       // 步数
       mount('ddSteps', chartBase({
         tooltip: { trigger: 'axis', formatter: ps => `${xFmt(ps[0].value[0])} · <b>${ps[0].value[1]}</b> 步${day.d && day.d[ps[0].value[0]] ? ` · ${day.d[ps[0].value[0]]} 米` : ''}` },
-        grid: { left: 50, right: 16, top: 20, bottom: 26 },
-        xAxis, yAxis: Object.assign({}, AXIS_VAL, { max: v => Math.max(40, Math.ceil(v.max * 1.15)) }),
+        grid: { left: 50, right: 16, top: 30, bottom: 26 },
+        xAxis, yAxis: Object.assign({}, AXIS_VAL, { name: '步', max: v => Math.max(40, Math.ceil(v.max * 1.15)) }),
         series: [{ type: 'bar', data: toPairs(day.s || []), barWidth: '99%', itemStyle: { color: '#3b6df0', borderRadius: [2, 2, 0, 0] } }],
       }), { silent: true });
 
@@ -215,8 +249,8 @@ window.Board = (function () {
       const sleepArea = bed != null ? [[{ xAxis: Math.max(bed, -180) }, { xAxis: Math.min(wake, 1439) }]] : [];
       mount('ddHr', chartBase({
         tooltip: { trigger: 'axis', formatter: ps => `${xFmt(ps[0].value[0])} · <b>${ps[0].value[1]}</b> bpm` },
-        grid: { left: 50, right: 16, top: 20, bottom: 26 },
-        xAxis, yAxis: Object.assign({}, AXIS_VAL, { min: v => Math.max(35, Math.floor(v.min - 8)) }),
+        grid: { left: 50, right: 16, top: 30, bottom: 26 },
+        xAxis, yAxis: Object.assign({}, AXIS_VAL, { name: 'bpm', min: v => Math.max(35, Math.floor(v.min - 8)) }),
         series: [{
           type: 'line', data: toPairs(day.h || []), showSymbol: false, smooth: false,
           lineStyle: { width: 1.4, color: '#e5484d' }, itemStyle: { color: '#e5484d' },
@@ -226,14 +260,14 @@ window.Board = (function () {
       }), { silent: true });
 
       // 压力 / 血氧
-      const mkLine = (id, arr, color, fmt) => mount(id, chartBase({
+      const mkLine = (id, arr, color, fmt, unit) => mount(id, chartBase({
         tooltip: { trigger: 'axis', formatter: ps => `${xFmt(ps[0].value[0])} · <b>${fmt(ps[0].value[1])}</b>` },
-        grid: { left: 46, right: 16, top: 20, bottom: 26 },
-        xAxis, yAxis: Object.assign({}, AXIS_VAL),
+        grid: { left: 46, right: 16, top: 30, bottom: 26 },
+        xAxis, yAxis: Object.assign({}, AXIS_VAL, { name: unit }),
         series: [{ type: 'line', data: toPairs(arr), showSymbol: false, lineStyle: { width: 1.4, color }, itemStyle: { color } }],
       }), { silent: true });
-      mkLine('ddStress', day.t || [], '#f76b15', v => v);
-      mkLine('ddSpo2', day.o || [], '#0e7f9f', v => v + '%');
+      mkLine('ddStress', day.t || [], '#f76b15', v => v, '分');
+      mkLine('ddSpo2', day.o || [], '#0e7f9f', v => v + '%', '%');
     },
   };
 

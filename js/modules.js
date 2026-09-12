@@ -41,8 +41,10 @@
   }
   function hasData(name) { return cnt(sl(name)) > 0; }
   function zoom(dsLen) {
-    return dsLen > 400 ? [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 6 }] : [{ type: 'inside' }];
+    return dsLen > 120 ? [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 6, labelFormatter: () => '' }] : [{ type: 'inside' }];
   }
+  /* 有缩放条时底部留 48，无则用紧凑底距 */
+  const zB = (n, base) => n > 120 ? 48 : base;
   /* 范围前一时段均值（用于对比） */
   function prevAvg(name) {
     const len = state.end - state.start + 1;
@@ -115,7 +117,7 @@
 
     const ds2 = dates();
     mount('ovSteps', chartBase(Object.assign({
-      grid: { left: 58, right: 20, top: 32, bottom: 30 },
+      grid: { left: 58, right: 36, top: 32, bottom: zB(ds2.length, 30) },
       dataZoom: zoom(ds2.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds2 }),
       yAxis: Object.assign({}, AXIS_VAL, { name: '步' }),
@@ -125,7 +127,8 @@
       }],
     }, vf(v => fmtInt(v) + ' 步'))));
     mount('ovSleep', chartBase(Object.assign({
-      grid: { left: 50, right: 16, top: 30, bottom: 26 },
+      grid: { left: 50, right: 36, top: 30, bottom: zB(ds2.length, 26) },
+      dataZoom: zoom(ds2.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds2 }),
       yAxis: Object.assign({}, AXIS_VAL, { name: '小时', minInterval: 1 }),
       series: [{ type: 'line', name: '睡眠', data: sl('slpTotal').map(v => v == null ? null : v / 60),
@@ -133,9 +136,10 @@
         areaStyle: { color: 'rgba(122,90,248,.08)' } }],
     }, vf(v => fmtDur(v * 60)))));
     mount('ovRhr', chartBase(Object.assign({
-      grid: { left: 46, right: 16, top: 20, bottom: 26 },
+      grid: { left: 46, right: 36, top: 32, bottom: zB(ds2.length, 26) },
+      dataZoom: zoom(ds2.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds2 }),
-      yAxis: Object.assign({}, AXIS_VAL, { scale: true }),
+      yAxis: Object.assign({}, AXIS_VAL, { scale: true, name: 'bpm' }),
       series: [{ type: 'line', name: '静息心率', data: sl('rhr'),
         showSymbol: false, lineStyle: { width: 1.5, color: C.hr }, itemStyle: { color: C.hr } }],
     }, vf(v => Math.round(v) + ' 次/分'))));
@@ -186,7 +190,7 @@
 
     const ds = dates();
     mount('stBar', chartBase(Object.assign({
-      grid: { left: 58, right: 50, top: 32, bottom: 34 },
+      grid: { left: 58, right: 50, top: 32, bottom: zB(ds.length, 30) },
       dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
       yAxis: Object.assign({}, AXIS_VAL, { name: '步' }),
@@ -248,19 +252,19 @@
     $('#hyNext').onclick = () => { if (yr < years[years.length - 1]) { state.heatYear = yr + 1; B.rerender(); } };
 
     mount('stHour', chartBase(Object.assign({
-      grid: { left: 46, right: 14, top: 20, bottom: 26 },
+      grid: { left: 46, right: 24, top: 32, bottom: 26 },
       xAxis: { type: 'category', data: [...Array(24)].map((_, i) => i + '时'),
-        axisLabel: { color: '#8a90a3', fontSize: 10 } },
-      yAxis: AXIS_VAL,
+        axisLabel: { color: '#8a90a3', fontSize: 10, showMaxLabel: true } },
+      yAxis: Object.assign({}, AXIS_VAL, { name: '步' }),
       series: [{ type: 'bar', name: '平均步数', data: H.hSteps, itemStyle: { color: '#3b6df0', borderRadius: [3, 3, 0, 0] } }],
     }, vf(v => Math.round(v) + ' 步'))), { silent: true });
 
     const WD_CN = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     mount('stWh', chartBase({
-      grid: { left: 44, right: 14, top: 14, bottom: 44 },
+      grid: { left: 44, right: 24, top: 14, bottom: 44 },
       tooltip: { position: 'top', trigger: 'item',
         formatter: p => `${WD_CN[p.value[1]]} ${p.value[0]}时 · 平均 <b>${Math.round(p.value[2])}</b> 步` },
-      xAxis: { type: 'category', data: [...Array(24)].map((_, i) => i), axisLabel: { color: '#8a90a3', fontSize: 10 } },
+      xAxis: { type: 'category', data: [...Array(24)].map((_, i) => i), axisLabel: { color: '#8a90a3', fontSize: 10, showMaxLabel: true } },
       yAxis: { type: 'category', data: ['一', '二', '三', '四', '五', '六', '日'],
         axisLabel: { color: '#8a90a3', fontSize: 11 } },
       visualMap: { show: false, min: 0, max: Math.max(...H.wh.flat()) || 100,
@@ -268,27 +272,30 @@
       series: [{ type: 'heatmap', data: H.wh.flatMap((row, w) => row.map((v, h) => [h, w, v])) }],
     }), { silent: true });
 
-    const mkTrend = (id, name, data, color, vfn) => mount(id, chartBase(Object.assign({
-      grid: { left: 52, right: 16, top: 20, bottom: 26 },
+    const mkTrend = (id, name, data, color, vfn, unit) => mount(id, chartBase(Object.assign({
+      grid: { left: 52, right: 36, top: 32, bottom: zB(ds.length, 26) },
+      dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
-      yAxis: AXIS_VAL,
+      yAxis: Object.assign({}, AXIS_VAL, { name: unit }),
       series: [{ type: 'line', name, data, showSymbol: false,
         lineStyle: { width: 1.4, color }, itemStyle: { color },
         areaStyle: { color: color + '14' } }],
     }, vfn ? vf(vfn) : {})));
     mkTrend('stDist', '距离', sl('dist').map(v => v == null ? null : +(v / 1000).toFixed(2)), C.weight,
-      v => fmtInt(v * 1000) + ' 米');
-    mkTrend('stCal', '卡路里', sl('cal'), '#f5a623', v => fmtInt(v) + ' 千卡');
+      v => fmtInt(v * 1000) + ' 米', '公里');
+    mkTrend('stCal', '卡路里', sl('cal'), '#f5a623', v => fmtInt(v) + ' 千卡', '千卡');
     mount('stStand', chartBase(Object.assign({
-      grid: { left: 40, right: 14, top: 20, bottom: 26 },
+      grid: { left: 40, right: 36, top: 32, bottom: zB(ds.length, 26) },
+      dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
-      yAxis: AXIS_VAL,
+      yAxis: Object.assign({}, AXIS_VAL, { name: '次' }),
       series: [{ type: 'bar', name: '站立次数', data: sl('stand'), itemStyle: { color: '#0e9f6e', borderRadius: [2, 2, 0, 0] } }],
     }, vf(v => fmtInt(v) + ' 次'))));
     mount('stInt', chartBase(Object.assign({
-      grid: { left: 40, right: 14, top: 20, bottom: 26 },
+      grid: { left: 40, right: 36, top: 32, bottom: zB(ds.length, 26) },
+      dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
-      yAxis: AXIS_VAL,
+      yAxis: Object.assign({}, AXIS_VAL, { name: '分钟' }),
       series: [{ type: 'bar', name: '中高强度时长', data: sl('intensity'), itemStyle: { color: '#f76b15', borderRadius: [2, 2, 0, 0] } }],
     }, vf(v => fmtInt(v) + ' 分钟'))));
   });
@@ -322,10 +329,10 @@
       </div>`;
 
     mount('hrRhr', chartBase(Object.assign({
-      grid: { left: 50, right: 64, top: 24, bottom: 34 },
+      grid: { left: 50, right: 64, top: 32, bottom: zB(ds.length, 30) },
       dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
-      yAxis: Object.assign({}, AXIS_VAL, { scale: true }),
+      yAxis: Object.assign({}, AXIS_VAL, { scale: true, name: 'bpm' }),
       series: [
         { type: 'line', name: '静息心率', data: sl('rhr'), showSymbol: false,
           lineStyle: { width: 1.5, color: C.hr }, itemStyle: { color: C.hr },
@@ -340,14 +347,14 @@
       .map(([k, n, col]) => ({ type: 'line', name: n, data: sl(k), showSymbol: false,
         lineStyle: { width: n === '平均' ? 1.8 : 1, color: col }, itemStyle: { color: col } }));
     mount('hrBand', chartBase(Object.assign({
-      grid: { left: 46, right: 20, top: 30, bottom: 30 },
+      grid: { left: 46, right: 36, top: 32, bottom: zB(ds.length, 30) },
       dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
-      yAxis: Object.assign({}, AXIS_VAL, { scale: true }),
+      yAxis: Object.assign({}, AXIS_VAL, { scale: true, name: 'bpm' }),
       series: bandSeries,
     }, vf(v => Math.round(v) + ' 次/分'))));
     mount('hrZone', chartBase(Object.assign({
-      grid: { left: 50, right: 20, top: 30, bottom: 34 },
+      grid: { left: 50, right: 36, top: 30, bottom: zB(ds.length, 30) },
       dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
       yAxis: Object.assign({}, AXIS_VAL, { name: '分钟' }),
@@ -378,8 +385,20 @@
       </div>`;
 
     mount('slpTotal', chartBase(Object.assign({
-      grid: { left: 50, right: 20, top: 32, bottom: 34 },
+      grid: { left: 50, right: 36, top: 32, bottom: zB(ds.length, 30) },
       dataZoom: zoom(ds.length),
+      tooltip: {
+        formatter: ps => {
+          let h = `<div style="font-weight:600;margin-bottom:2px">${ps[0].name}</div>`;
+          ps.forEach(p => { h += `${p.marker}${p.seriesName} <b>${p.value != null ? fmtDur(p.value * 60) : '—'}</b><br/>`; });
+          const i = ds.indexOf(ps[0].name);
+          if (i >= 0) {
+            const b = sl('bedMin')[i], w = sl('wakeMin')[i];
+            if (b != null && w != null) h += `<div style="border-top:1px solid #eceef4;margin-top:4px;padding-top:4px"><span style="color:#8a90a3">入睡 / 起床</span> <b>${fmtClock(b)} ~ ${fmtClock(w)}</b></div>`;
+          }
+          return h;
+        },
+      },
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
       yAxis: Object.assign({}, AXIS_VAL, { name: '小时', minInterval: 1 }),
       series: [
@@ -392,10 +411,10 @@
         { type: 'line', name: '7日均线', data: movingAvg(sl('slpTotal'), 7).map(v => v == null ? null : +(v / 60).toFixed(2)),
           showSymbol: false, lineStyle: { width: 2.2, color: '#4c2fd6' }, itemStyle: { color: '#4c2fd6' } },
       ],
-    }, vf(v => fmtDur(v * 60)))));
+    })));
     const toH = a => a.map(v => v == null ? null : +(v / 60).toFixed(2));
     mount('slpStruct', chartBase(Object.assign({
-      grid: { left: 50, right: 20, top: 30, bottom: 34 },
+      grid: { left: 50, right: 36, top: 30, bottom: zB(ds.length, 30) },
       dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
       yAxis: Object.assign({}, AXIS_VAL, { name: '小时' }),
@@ -407,9 +426,10 @@
       ],
     }, vf(v => fmtDur(v * 60)))));
     mount('slpScore', chartBase(Object.assign({
-      grid: { left: 40, right: 16, top: 22, bottom: 26 },
+      grid: { left: 40, right: 36, top: 32, bottom: zB(ds.length, 26) },
+      dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
-      yAxis: Object.assign({}, AXIS_VAL, { min: 0, max: 100 }),
+      yAxis: Object.assign({}, AXIS_VAL, { min: 0, max: 100, name: '分' }),
       series: [{ type: 'line', name: '睡眠评分', data: sl('slpScore'),
         showSymbol: ds.length < 90, symbolSize: 4,
         lineStyle: { width: 1.4, color: C.sleep }, itemStyle: { color: C.sleep } }],
@@ -418,7 +438,7 @@
     const sc = arr => ds.map((d, i) => arr[i] == null ? null : [d, arr[i]])
       .filter(v => v != null && v[1] > -420 && v[1] < 1140);
     mount('slpSched', chartBase({
-      grid: { left: 60, right: 20, top: 26, bottom: 34 },
+      grid: { left: 60, right: 36, top: 26, bottom: zB(ds.length, 30) },
       dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
       yAxis: { type: 'value', min: -420, max: 1140, interval: 120,
@@ -427,8 +447,13 @@
       tooltip: {
         trigger: 'axis',
         formatter: ps => {
-          let h = `${ps[0].axisValue}<br/>`;
+          let h = `<div style="font-weight:600;margin-bottom:2px">${ps[0].axisValue}</div>`;
           ps.forEach(p => { h += `${p.marker}${p.seriesName} <b>${fmtClock(p.value[1])}</b><br/>`; });
+          const i = ds.indexOf(ps[0].axisValue);
+          if (i >= 0) {
+            const b = sl('bedMin')[i], w = sl('wakeMin')[i];
+            if (b != null && w != null) h += `<div style="border-top:1px solid #eceef4;margin-top:4px;padding-top:4px"><span style="color:#8a90a3">时长</span> <b>${fmtDur((w - b + 1440) % 1440)}</b></div>`;
+          }
           return h;
         },
       },
@@ -482,8 +507,8 @@
         ${statCardRange('总里程', totDist > 1000 ? (totDist / 1000).toFixed(1) : totDist, 'km', C.sport)}
         ${statCardRange('总时长', totDur >= 3600 ? (totDur / 3600).toFixed(1) : Math.round(totDur / 60), totDur >= 3600 ? '小时' : '分钟', C.sport)}
         ${statCardRange('总卡路里', fmtInt(totCal), 'kcal', C.sport)}
-        ${card('spPie', '类型分布', '按次数', 4, 'short')}
-        ${card('spMonth', '月度运动里程', 'km', 8, '')}
+        ${card('spPie', '类型分布', '按次数', 4, '')}
+        ${card('spMonth', '月度运动里程', '', 8, '')}
         ${card('spPace', '跑步配速趋势', '仅跑步记录 · 越靠上越快', 6, '')}
         ${card('spHr', '运动心率', '每次运动的平均心率', 6, '')}
         <div class="card col-12"><div class="card-h">
@@ -519,9 +544,9 @@
     }, { silent: true });
 
     mount('spMonth', chartBase(Object.assign({
-      grid: { left: 50, right: 20, top: 24, bottom: 30 },
-      dataZoom: mk.length > 40 ? [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 6 }] : [{ type: 'inside' }],
-      xAxis: { type: 'category', data: mk, axisLabel: { color: '#8a90a3', fontSize: 10, rotate: mk.length > 24 ? 40 : 0 } },
+      grid: { left: 50, right: 30, top: 32, bottom: mk.length > 40 ? 48 : 30 },
+      dataZoom: mk.length > 40 ? [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 6, labelFormatter: () => '' }] : [{ type: 'inside' }],
+      xAxis: { type: 'category', data: mk, axisLabel: { color: '#8a90a3', fontSize: 10, rotate: mk.length > 24 ? 40 : 0, showMaxLabel: true } },
       yAxis: Object.assign({}, AXIS_VAL, { name: '公里' }),
       series: [{ type: 'bar', name: '运动里程', data: mk.map(m => +(byMonth[m] / 1000).toFixed(1)),
         itemStyle: { color: '#8147d8', borderRadius: [3, 3, 0, 0] } }],
@@ -529,19 +554,22 @@
 
     const runs = list.filter(s => s.t.includes('running') && s.pace);
     mount('spPace', chartBase(Object.assign({
-      grid: { left: 54, right: 20, top: 26, bottom: 30 },
+      grid: { left: 54, right: 36, top: 32, bottom: zB(runs.length, 30) },
+      dataZoom: zoom(runs.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: runs.map(s => s.d) }),
-      yAxis: Object.assign({}, AXIS_VAL, { inverse: true, min: v => Math.floor(v.min - 15),
+      yAxis: Object.assign({}, AXIS_VAL, { inverse: true, min: v => Math.floor(v.min - 15), name: '分/公里', nameLocation: 'start',
         axisLabel: { color: '#8a90a3', fontSize: 11, formatter: v => fmtPace(v) } }),
       series: [{ type: 'scatter', name: '配速', data: runs.map(s => s.pace), symbolSize: 6,
         itemStyle: { color: p => p.value < 300 ? '#0e9f6e' : p.value < 360 ? '#3b6df0' : '#aebdf7', opacity: .8 } }],
     }, vf(v => fmtPace(v) + ' /公里'))));
+    const hrPts = list.filter(s => s.aHr);
     mount('spHr', chartBase(Object.assign({
-      grid: { left: 46, right: 20, top: 26, bottom: 30 },
-      xAxis: Object.assign({}, AXIS_DATE, { data: list.filter(s => s.aHr).map(s => s.d) }),
-      yAxis: Object.assign({}, AXIS_VAL, { scale: true, min: 80 }),
+      grid: { left: 46, right: 36, top: 32, bottom: zB(hrPts.length, 30) },
+      dataZoom: zoom(hrPts.length),
+      xAxis: Object.assign({}, AXIS_DATE, { data: hrPts.map(s => s.d) }),
+      yAxis: Object.assign({}, AXIS_VAL, { scale: true, name: 'bpm' }),
       series: [{ type: 'scatter', name: '运动平均心率',
-        data: list.filter(s => s.aHr).map(s => s.aHr), symbolSize: 6,
+        data: hrPts.map(s => s.aHr), symbolSize: 6,
         itemStyle: { color: '#e5484d', opacity: .75 } }],
     }, vf(v => Math.round(v) + ' 次/分'))));
   });
@@ -566,17 +594,17 @@
       <div class="grid">
         ${hasW ? card('bw', '体重趋势', `身高 ${META.profile.height}cm · BMI 正常区间对应 ${wLow}–${wHigh}kg · 最新 ${fmtNum(wLast, 1)}kg（BMI ${bmi}）`, 8, '')
                : emptyCard('体重趋势', '', 8)}
-        ${card('bvo2', 'VO₂max', '最大摄氧量', 4, 'short')}
+        ${card('bvo2', 'VO₂max', '最大摄氧量', 4, '')}
         ${card('bspo2', '血氧', '日均 / 最低', 6, '')}
         ${card('bpai', 'PAI 活力指数', '7 日滚动 · 100 分达标', 6, '')}
         ${vitHas ? card('bvit', '活力时长', '低 / 中 / 高强度活动分钟数', 12, '') : ''}
       </div>`;
 
     if (hasW) mount('bw', chartBase(Object.assign({
-      grid: { left: 48, right: 20, top: 26, bottom: 30 },
+      grid: { left: 48, right: 36, top: 32, bottom: zB(dates().length, 30) },
       dataZoom: zoom(dates().length),
       xAxis: Object.assign({}, AXIS_DATE, { data: dates() }),
-      yAxis: Object.assign({}, AXIS_VAL, { scale: true }),
+      yAxis: Object.assign({}, AXIS_VAL, { scale: true, name: 'kg' }),
       series: [{ type: 'line', name: '体重', data: sl('weight'),
         symbol: 'circle', symbolSize: 4, connectNulls: true,
         lineStyle: { width: 1.8, color: C.weight }, itemStyle: { color: C.weight },
@@ -586,17 +614,19 @@
           data: [[{ yAxis: wLow, name: 'BMI 18.5–24' }, { yAxis: wHigh }]] } }],
     }, vf(fmtKg))));
     mount('bvo2', chartBase(Object.assign({
-      grid: { left: 40, right: 16, top: 22, bottom: 26 },
+      grid: { left: 40, right: 36, top: 32, bottom: zB(dates().length, 26) },
+      dataZoom: zoom(dates().length),
       xAxis: Object.assign({}, AXIS_DATE, { data: dates() }),
-      yAxis: Object.assign({}, AXIS_VAL, { scale: true, min: 30 }),
+      yAxis: Object.assign({}, AXIS_VAL, { scale: true, name: 'ml/kg/min' }),
       series: [{ type: 'line', name: 'VO₂max', data: sl('vo2'),
         symbol: 'circle', symbolSize: 5, connectNulls: true,
         lineStyle: { width: 1.6, color: '#8147d8' }, itemStyle: { color: '#8147d8' } }],
     }, vf(v => fmtInt(v) + ' ml/kg/min'))));
     mount('bspo2', chartBase(Object.assign({
-      grid: { left: 44, right: 20, top: 30, bottom: 30 },
+      grid: { left: 44, right: 36, top: 32, bottom: zB(dates().length, 30) },
+      dataZoom: zoom(dates().length),
       xAxis: Object.assign({}, AXIS_DATE, { data: dates() }),
-      yAxis: Object.assign({}, AXIS_VAL, { min: 80, max: 100 }),
+      yAxis: Object.assign({}, AXIS_VAL, { min: 80, max: 100, name: '%' }),
       series: [
         { type: 'line', name: '日均血氧', data: sl('spo2'), showSymbol: false,
           lineStyle: { width: 1.5, color: C.spo2 }, itemStyle: { color: C.spo2 } },
@@ -605,9 +635,10 @@
       ],
     }, vf(v => fmtInt(v) + ' %'))));
     mount('bpai', chartBase(Object.assign({
-      grid: { left: 44, right: 64, top: 26, bottom: 30 },
+      grid: { left: 44, right: 64, top: 32, bottom: zB(dates().length, 30) },
+      dataZoom: zoom(dates().length),
       xAxis: Object.assign({}, AXIS_DATE, { data: dates() }),
-      yAxis: Object.assign({}, AXIS_VAL, { max: 110 }),
+      yAxis: Object.assign({}, AXIS_VAL, { name: '分' }),
       series: [
         { type: 'bar', name: 'PAI', data: sl('pai'), itemStyle: { color: '#f5a623', borderRadius: [2, 2, 0, 0] } },
         { type: 'line', name: '7日均线', data: movingAvg(sl('pai'), 7), showSymbol: false,
@@ -617,7 +648,8 @@
       ],
     }, vf(v => (v % 1 ? v.toFixed(1) : v) + ' 分'))));
     if (vitHas) mount('bvit', chartBase(Object.assign({
-      grid: { left: 50, right: 20, top: 30, bottom: 30 },
+      grid: { left: 50, right: 36, top: 30, bottom: zB(dates().length, 30) },
+      dataZoom: zoom(dates().length),
       xAxis: Object.assign({}, AXIS_DATE, { data: dates() }),
       yAxis: Object.assign({}, AXIS_VAL, { name: '分钟' }),
       series: [
@@ -660,10 +692,10 @@
       </div>`;
 
     mount('psTrend', chartBase(Object.assign({
-      grid: { left: 46, right: 20, top: 26, bottom: 34 },
+      grid: { left: 46, right: 36, top: 32, bottom: zB(ds.length, 30) },
       dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
-      yAxis: Object.assign({}, AXIS_VAL, { max: 100 }),
+      yAxis: Object.assign({}, AXIS_VAL, { max: 100, name: '分' }),
       series: [
         { type: 'line', name: '日均压力', data: sl('stress'), showSymbol: false,
           lineStyle: { width: 1.4, color: C.stress }, itemStyle: { color: C.stress },
@@ -673,7 +705,7 @@
       ],
     }, vf(v => Math.round(v) + ''))));
     mount('psScale', chartBase(Object.assign({
-      grid: { left: 50, right: 20, top: 30, bottom: 34 },
+      grid: { left: 50, right: 36, top: 30, bottom: zB(ds.length, 30) },
       dataZoom: zoom(ds.length),
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
       yAxis: Object.assign({}, AXIS_VAL, { name: '分钟' }),
