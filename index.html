@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>健康数据看板</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?t=20260912113000">
 </head>
 <body>
 <div id="app">
@@ -49,17 +49,28 @@
   </div>
 </div>
 
+<!-- 单次运动弹层 -->
+<div class="overlay" id="sportModal">
+  <div class="modal sm">
+    <div class="modal-h">
+      <span class="sm-title"></span><span class="sm-sub"></span>
+      <button class="sm-day">查看当日</button>
+      <button class="close">✕</button>
+    </div>
+    <div class="modal-b"></div>
+  </div>
+</div>
+
 <script src="lib/echarts.min.js"></script>
-<script src="data/meta.js" onerror="window.__DATA_READY__=false"></script>
-<script src="data/daily.js" onerror="window.__DATA_READY__=false"></script>
-<script src="data/sports.js" onerror="window.__DATA_READY__=false"></script>
-<script src="data/hourly.js" onerror="window.__DATA_READY__=false"></script>
+<script>
+  /* 带时间戳加载，防止 file:// 下 Chrome 缓存旧版数据/脚本 */
+  ['data/meta.js', 'data/daily.js', 'data/sports.js', 'data/hourly.js', 'js/app.js', 'js/modules.js']
+    .forEach(u => document.write('<script src="' + u + '?t=' + Date.now() + '"><\/script>'));
+</script>
 <script>
   // 数据文件缺失时的友好提示（需在数据脚本加载完成后计算）
   window.__DATA_READY__ = !!(window.__DAILY__ && window.__META__);
 </script>
-<script src="js/app.js"></script>
-<script src="js/modules.js"></script>
 <script>
 (function () {
   if (!window.__DATA_READY__) {

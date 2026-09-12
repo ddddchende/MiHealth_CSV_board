@@ -256,14 +256,113 @@ if f:
             sports.append({
                 'd': day_str(st) if st else day_str(int(row['Time'])),
                 't': row['Key'],
+                'st': st, 'et': et,                # 起止 unix 秒
                 'dur': dur,                      # 秒
                 'dist': dist,                    # 米
                 'cal': v.get('calories'),
-                'aHr': v.get('avg_hrm'), 'mHr': v.get('max_hrm'),
+                'aHr': v.get('avg_hrm'), 'mHr': v.get('max_hrm'), 'nHr': v.get('min_hrm'),
                 'pace': round(dur / (dist / 1000), 1) if dist > 100 else None,  # 秒/公里
+                # 小米的 min/max_pace 是速度域命名：min_pace=最慢、max_pace=最快
+                'paceBest': v.get('max_pace'), 'paceWorst': v.get('min_pace'),
+                'spd': v.get('avg_speed'), 'spdMax': v.get('max_speed'),        # km/h
                 'climb': v.get('total_climbing'),
+                'rise': v.get('rise_height'), 'fall': v.get('fall_height'),     # 米
+                'steps': v.get('steps'), 'totalCal': v.get('total_cal'),
+                'cad': v.get('avg_cadence'), 'cadMax': v.get('max_cadence'),    # 步频
+                'stride': v.get('avg_stride'),                                  # 步幅 cm
+                'tdc': v.get('avg_touchdown_duration'),                         # 触地 ms
+                'vo': v.get('avg_vertical_amplitude'),                          # 垂直振幅 cm
+                'vsr': v.get('avg_vertical_stride_ratio'),                      # 垂直步幅比 %
+                'te': v.get('train_effect'), 'teAna': v.get('anaerobic_train_effect'),
+                'load': v.get('train_load'), 'rec': v.get('recover_time'),      # 负荷 / 恢复小时
+                'vo2': v.get('vo2_max'), 'rai': v.get('running_ability_index'),
+                'zw': v.get('hrm_warm_up_duration'), 'zf': v.get('hrm_fat_burning_duration'),
+                'za': v.get('hrm_aerobic_duration'), 'zn': v.get('hrm_anaerobic_duration'),
+                'ze': v.get('hrm_extreme_duration'),
+                'pred': [v.get('five_kilometre_grade_prediction_duration') or None,
+                         v.get('ten_kilometre_grade_prediction_duration') or None,
+                         v.get('half_marathon_grade_prediction_duration') or None,
+                         v.get('full_marathon_grade_prediction_duration') or None],  # 5k/10k/半马/全马
             })
     sports.sort(key=lambda x: x['d'])
+    for i, s in enumerate(sports):
+        s['i'] = i
+
+    # ---------------- GPS 轨迹（需联网下载 GPX，失败跳过；本地按 URL 哈希缓存） ----------------
+    def parse_gpx(xml_text):
+        """GPX -> [[lon, lat, ele, hr], ...]（ele/hr 缺失为 None）"""
+        import xml.etree.ElementTree as ET
+        try:
+            root = ET.fromstring(xml_text)
+        except Exception:
+            return None
+        pts = []
+        for el in root.iter():
+            if not el.tag.endswith('trkpt'):
+                continue
+            lat, lon = el.get('lat'), el.get('lon')
+            if not lat or not lon:
+                continue
+            ele = hr = None
+            for c in el.iter():
+                txt = (c.text or '').strip()
+                if txt and c.tag.endswith('ele'):
+                    ele = round(float(txt))
+                elif txt and c.tag.endswith('hr'):
+                    hr = int(float(txt))
+            pts.append([round(float(lon), 5), round(float(lat), 5), ele, hr])
+        return pts or None
+
+    track_f = find_file('_hlth_center_sport_track_data.csv')
+    if track_f:
+        print('\n[3.5/4] 下载并解析 GPS 轨迹（需联网，离线/失败自动跳过）...')
+        import hashlib, urllib.request, gzip as _gzip
+        urls = []
+        with open(track_f, encoding='utf-8') as fp:
+            for row in csv.DictReader(fp):
+                u = (row.get('GPX') or '').strip()
+                if u:
+                    urls.append((row['Key'], int(row['Time']), u))
+        ok = miss = fail = 0
+        for s in sports:
+            # 按开始时间就近匹配（±10 分钟）。轨迹行的 Key 与运动记录可能不一致
+            # （如 outdoor_run_class vs outdoor_running），故不校验类型
+            if not s.get('st'):
+                miss += 1
+                continue
+            cand = [(abs(t - s['st']), u) for k, t, u in urls if abs(t - s['st']) < 600]
+            if not cand:
+                miss += 1
+                continue
+            hit = min(cand)[1]
+            cache = os.path.join(OUT, 'gpx', hashlib.md5(hit.encode()).hexdigest()[:16] + '.gpx')
+            try:
+                if os.path.exists(cache):
+                    raw = open(cache, 'rb').read()
+                else:
+                    os.makedirs(os.path.dirname(cache), exist_ok=True)
+                    req = urllib.request.Request(hit, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=25) as resp:
+                        raw = resp.read()
+                    open(cache, 'wb').write(raw)
+                if raw[:2] == b'\x1f\x8b':
+                    raw = _gzip.decompress(raw)
+                pts = parse_gpx(raw.decode('utf-8', 'ignore'))
+                if pts and len(pts) > 1:
+                    if len(pts) > 600:                      # 降采样，保留首尾
+                        full = pts
+                        step = -(-len(full) // 600)
+                        pts = full[::step]
+                        if pts[-1] != full[-1]:
+                            pts.append(full[-1])
+                    s['track'] = pts
+                    ok += 1
+                else:
+                    fail += 1
+            except Exception:
+                fail += 1
+                continue
+        print(f'  轨迹: 成功 {ok}，无轨迹文件 {miss}，解析/下载失败 {fail}')
 
 # ---------------------------------------------------------------- 5. 大明细文件（流式）
 print('\n[4/4] 流式解析分钟级明细 (约 1GB, 需几分钟) ...')
@@ -505,7 +604,8 @@ for md in sorted(months):
         continue
     obj = {}
     for dn, mets in months[md].items():
-        obj[str(dn)] = {met: list(a) for met, a in mets.items() if any(a)}
+        # 键补零两位，与日期字符串 '2026-09-05' 的 slice(8,10) 对齐
+        obj[f'{dn:02d}'] = {met: list(a) for met, a in mets.items() if any(a)}
     p = os.path.join(OUT, 'minutes', f'{md}.js')
     with open(p, 'w', encoding='utf-8') as f:
         f.write(f'window.__MIN__=window.__MIN__||{{}};window.__MIN__["{md}"]="')

@@ -389,12 +389,15 @@
       dataZoom: zoom(ds.length),
       tooltip: {
         formatter: ps => {
-          let h = `<div style="font-weight:600;margin-bottom:2px">${ps[0].name}</div>`;
-          ps.forEach(p => { h += `${p.marker}${p.seriesName} <b>${p.value != null ? fmtDur(p.value * 60) : '—'}</b><br/>`; });
+          /* 行内 flex：标记点+名称居左、数值居右，与其他 tooltip 行对齐一致 */
+          let h = `<div style="font-weight:600;margin-bottom:4px">${ps[0].name}</div>`;
+          ps.forEach(p => {
+            h += `<div style="display:flex;align-items:center;margin:2px 0">${p.marker}<span style="margin-left:4px">${p.seriesName}</span><b style="margin-left:auto;padding-left:16px">${p.value != null ? fmtDur(p.value * 60) : '—'}</b></div>`;
+          });
           const i = ds.indexOf(ps[0].name);
           if (i >= 0) {
             const b = sl('bedMin')[i], w = sl('wakeMin')[i];
-            if (b != null && w != null) h += `<div style="border-top:1px solid #eceef4;margin-top:4px;padding-top:4px"><span style="color:#8a90a3">入睡 / 起床</span> <b>${fmtClock(b)} ~ ${fmtClock(w)}</b></div>`;
+            if (b != null && w != null) h += `<div style="border-top:1px solid #eceef4;margin-top:6px;padding-top:6px;display:flex;justify-content:space-between;gap:16px"><span style="color:#8a90a3">入睡 / 起床</span><b>${fmtClock(b)} ~ ${fmtClock(w)}</b></div>`;
           }
           return h;
         },
@@ -416,6 +419,17 @@
     mount('slpStruct', chartBase(Object.assign({
       grid: { left: 50, right: 36, top: 30, bottom: zB(ds.length, 30) },
       dataZoom: zoom(ds.length),
+      tooltip: {
+        formatter: ps => {
+          let h = `<div style="font-weight:600;margin-bottom:4px">${ps[0].name}</div>`;
+          const total = ps.reduce((a, p) => a + (p.value || 0), 0);
+          h += `<div style="margin:2px 0 4px;text-align:center"><b>睡眠时长 ${fmtDur(total * 60)}</b></div>`;
+          ps.forEach(p => {
+            h += `<div style="display:flex;align-items:center;margin:2px 0">${p.marker}<span style="margin-left:4px">${p.seriesName}</span><b style="margin-left:auto;padding-left:16px">${p.value != null ? fmtDur(p.value * 60) : '—'}</b></div>`;
+          });
+          return h;
+        },
+      },
       xAxis: Object.assign({}, AXIS_DATE, { data: ds }),
       yAxis: Object.assign({}, AXIS_VAL, { name: '小时' }),
       series: [
@@ -424,7 +438,7 @@
         { type: 'bar', name: 'REM', stack: 's', data: toH(sl('slpRem')), itemStyle: { color: '#c9c0ff' } },
         { type: 'bar', name: '清醒', stack: 's', data: toH(sl('slpAwake')), itemStyle: { color: '#f0b8b4' } },
       ],
-    }, vf(v => fmtDur(v * 60)))));
+    })));
     mount('slpScore', chartBase(Object.assign({
       grid: { left: 40, right: 36, top: 32, bottom: zB(ds.length, 26) },
       dataZoom: zoom(ds.length),
@@ -489,7 +503,7 @@
     });
     const COLS = [['d', '日期'], ['t', '类型'], ['dur', '时长'], ['dist', '距离'], ['pace', '配速'],
       ['cal', '卡路里'], ['aHr', '均心率'], ['mHr', '最高心率'], ['climb', '爬升(m)']];
-    const rows = sorted.map(s => `<tr data-d="${s.d}">
+    const rows = sorted.map(s => `<tr data-d="${s.d}" data-i="${s.i}">
       <td>${s.d}</td><td><span class="tag">${typeCn[s.t] || s.t}</span></td>
       <td>${fmtDurS(s.dur)}</td><td>${s.dist > 100 ? fmtKm(s.dist) : '—'}</td>
       <td>${s.pace ? fmtPace(s.pace) : '—'}</td><td>${s.cal != null ? s.cal : '—'}</td>
@@ -512,7 +526,7 @@
         ${card('spPace', '跑步配速趋势', '仅跑步记录 · 越靠上越快', 6, '')}
         ${card('spHr', '运动心率', '每次运动的平均心率', 6, '')}
         <div class="card col-12"><div class="card-h">
-          <div><div class="t">运动记录</div><div class="s">点击表头排序 · 点击行查看当日</div></div>
+          <div><div class="t">运动记录</div><div class="s">点击表头排序 · 点击行查看单次运动详情</div></div>
           <div class="tools type-chips">${typeChips}</div></div>
           <div class="table-wrap"><table><thead><tr>
             ${COLS.map(c => `<th data-k="${c[0]}">${c[1]}${k === c[0] ? (dir > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}
@@ -528,7 +542,7 @@
       if (state.sortKey === kk) state.sortDir *= -1; else { state.sortKey = kk; state.sortDir = -1; }
       B.rerender();
     });
-    sec.querySelectorAll('tbody tr').forEach(tr => tr.onclick = () => B.openDay(tr.dataset.d));
+    sec.querySelectorAll('tbody tr').forEach(tr => tr.onclick = () => B.openSport(+tr.dataset.i));
 
     // 类型饼图
     const typeCnt = {};
